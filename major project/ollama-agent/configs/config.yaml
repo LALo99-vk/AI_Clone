@@ -1,0 +1,8 @@
+# Example configuration file for API keys and settings
+gmail:
+  api_key: "YOUR_GMAIL_API_KEY_HERE"
+calendar:
+  api_key: "YOUR_GOOGLE_CALENDAR_API_KEY_HERE"
+slack:
+  token: "YOUR_SLACK_API_TOKEN_HERE"
+default_assignee: "Divya"

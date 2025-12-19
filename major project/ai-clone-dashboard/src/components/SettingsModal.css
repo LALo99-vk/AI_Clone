@@ -1,0 +1,115 @@
+/* SettingsModal.css */
+.settings-item {
+  border-radius: 8px;
+  transition: box-shadow 0.14s, background 0.13s;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  margin-bottom: 16px;
+  background: #fff;
+  border: 1px solid #f3f3f4;
+}
+.settings-item:hover, .settings-item.selected {
+  background: #f4f6ff;
+  box-shadow: 0 0 0 2px #635bff3a;
+}
+.settings-arrow-icon {
+  font-size: 24px;
+  color: #bcbfd6;
+  transition: color 0.13s;
+}
+.settings-item:hover .settings-arrow-icon,
+.settings-item.selected .settings-arrow-icon {
+  color: #635bff;
+}
+.settings-save-btn {
+  background: #635bff;
+  color: #fff;
+  border-radius: 7px;
+  font-weight: 600;
+  padding: 14px 32px;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #635bff22;
+  margin-top: 22px;
+  margin-bottom: 10px;
+  transition: background 0.17s;
+}
+.settings-save-btn:hover, .settings-save-btn:focus {
+  background: #473eea;
+}
+.modal-backdrop {
+  z-index: 1001;
+  position: fixed;
+  left: 0; top: 0; right: 0; bottom: 0;
+  background:rgba(38,40,68,0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.settings-modal {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(72,78,124,0.16);
+  padding: 38px 36px 28px 36px;
+  min-width: 350px;
+  max-width: 92vw;
+  min-height: 120px;
+  z-index: 1002;
+}
+.settings-modal h4 {
+  margin: 0 0 18px 0; color: #262e47; font-weight: 700;
+}
+.settings-modal input, .settings-modal select {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  border: 1px solid #dce1e6;
+  border-radius: 7px;
+  font-size: 16px;
+}
+@media (max-width: 600px) {
+  .settings-modal {
+    min-width: 90vw;
+    padding: 20px 12px;
+  }
+  .settings-item {
+    padding: 14px 8px;
+  }
+}
+.settings-modal button {
+  margin-right: 14px;
+  min-width: 99px;
+  background: #635bff;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 16px;
+  padding: 11px 0;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 6px;
+  box-shadow: 0 1px 4px #635bff16;
+  transition: background 0.17s;
+}
+.settings-modal button.cancel-btn {
+  background: #e4e7f0;
+  color: #222;
+  border: 1px solid #dadbe4;
+}
+.settings-modal button:hover { background: #473eea; }
+.settings-modal button.cancel-btn:hover { background: #d5dae7;}
+.settings-modal .status-msg {
+  margin-left: 14px;
+  font-weight: 600;
+  font-size: 15px;
+}
+.settings-modal .status-msg.saved {
+  color: #26c274;
+}
+.settings-modal .status-msg.error {
+  color: #d43c3c;
+}

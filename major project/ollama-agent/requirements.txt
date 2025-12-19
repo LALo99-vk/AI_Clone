@@ -1,0 +1,5 @@
+langchain-community
+langchain-ollama
+PyYAML
+requests
+# Add more packages here if needed

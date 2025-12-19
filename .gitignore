@@ -1,0 +1,7 @@
+node_modules/
+.env
+major project/.ollama/
+major project/models/
+major project/ai-clone-dashboard-backend/token.json
+major project/ai-clone-dashboard-backend/credentials.json.json
+major project/ai-clone-dashboard-backend/credentials.json

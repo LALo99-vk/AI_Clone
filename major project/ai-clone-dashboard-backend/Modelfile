@@ -1,0 +1,4 @@
+FROM llama2
+PARAMETER temperature 0.4
+PARAMETER num_ctx 4096
+SYSTEM "Always answer in one crisp, concise sentence—never elaborate. Keep replies as short as possible, single-line only."
