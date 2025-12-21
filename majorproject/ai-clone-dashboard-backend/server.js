@@ -1018,17 +1018,17 @@ app.post('/api/schedule-meeting', async (req, res) => {
     const formattedStart = formatDateTimeForGoogle(startDateTime);
     const formattedEnd = formatDateTimeForGoogle(endDateTime);
 
-    const eventConfig = {
-      summary: summary,
+  const eventConfig = {
+    summary: summary,
       start: { dateTime: formattedStart, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       end: { dateTime: formattedEnd, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-      attendees: [{ email: attendeeEmail }],
-      conferenceData: {
-        createRequest: {
-          conferenceSolutionKey: { type: 'hangoutsMeet' }
-        }
+    attendees: [{ email: attendeeEmail }],
+    conferenceData: {
+      createRequest: {
+        conferenceSolutionKey: { type: 'hangoutsMeet' }
       }
-    };
+    }
+  };
 
     const response = await calendar.events.insert({
       calendarId: 'primary',
