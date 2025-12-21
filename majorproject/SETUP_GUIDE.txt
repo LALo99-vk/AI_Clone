@@ -1,0 +1,160 @@
+================================================================================
+AI CLONE DASHBOARD - COMPLETE SETUP GUIDE
+================================================================================
+
+STEP 1: CREATE BACKEND .ENV FILE (Optional but Recommended)
+------------------------------------------------------------
+Location: ai-clone-dashboard-backend/.env
+
+Create this file with your MongoDB connection string (optional - has default):
+MONGODB_URI=mongodb+srv://your-username:your-password@cluster.mongodb.net/?appName=your-app
+
+Note: If you don't create this, the backend will use the hardcoded MongoDB URI in server.js
+
+
+STEP 2: START THE BACKEND SERVER
+---------------------------------
+cd ai-clone-dashboard-backend
+npm run dev
+
+The server should start on http://localhost:5000
+You should see: "Server running on http://localhost:5000"
+
+
+STEP 3: INSTALL OLLAMA (For AI Chat Feature)
+---------------------------------------------
+1. Visit: https://ollama.com/download
+2. Download and install Ollama for macOS
+3. After installation, verify it's running:
+   ollama --version
+
+4. Pull the base model:
+   ollama pull llama2
+
+5. Create the custom model for this project:
+   cd ai-clone-dashboard-backend
+   ollama create llama2-short -f Modelfile
+
+6. Verify the model was created:
+   ollama list
+
+Expected output should show "llama2-short" in the list
+
+
+STEP 4: SET UP GOOGLE OAUTH (For Email & Calendar Features)
+------------------------------------------------------------
+This is required for:
+- Sending emails via Gmail API
+- Scheduling meetings via Google Calendar API
+
+4.1. Create Google Cloud Project:
+   - Go to: https://console.cloud.google.com/
+   - Create a new project (or use existing)
+
+4.2. Enable APIs:
+   - Go to: https://console.cloud.google.com/apis/library
+   - Enable these APIs:
+     * Gmail API
+     * Google Calendar API
+     * Google Classroom API (optional)
+
+4.3. Create OAuth 2.0 Credentials:
+   - Go to: https://console.cloud.google.com/apis/credentials
+   - Click "Create Credentials" > "OAuth client ID"
+   - Application type: "Web application"
+   - Name: "AI Clone Dashboard"
+   - Authorized redirect URIs:
+     * http://localhost:5000/oauth2callback
+   - Click "Create"
+
+4.4. Download credentials:
+   - After creating, click the download button (arrow icon)
+   - Save the JSON file as: credentials.json
+   - Move it to: ai-clone-dashboard-backend/credentials.json
+
+4.5. Authenticate (First Time Only):
+   - With backend server running, visit: http://localhost:5000/login/google
+   - Sign in with your Google account
+   - Grant permissions
+   - You'll be redirected and see "OAuth successful!"
+   - A token.json file will be auto-generated
+
+
+STEP 5: SET UP PYTHON AGENT (Optional - For Advanced Features)
+---------------------------------------------------------------
+5.1. Create virtual environment:
+   cd ollama-agent
+   python3 -m venv virtualenv
+   source virtualenv/bin/activate
+
+5.2. Install dependencies:
+   pip install -r requirements.txt
+
+5.3. Create .env file:
+   Create: ollama-agent/.env
+   
+   Add these (use same values from Google OAuth setup):
+   GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=your-client-secret
+   GOOGLE_REDIRECT_URI=http://localhost:5173/
+   GOOGLE_API_KEY=your-api-key-optional
+
+
+STEP 6: VERIFY EVERYTHING WORKS
+--------------------------------
+6.1. Frontend:
+   - Should already be running on http://localhost:5173
+   - If not: cd ai-clone-dashboard && npm run dev
+
+6.2. Backend:
+   - Visit: http://localhost:5000/
+   - Should see: "AI Clone Dashboard Backend API is running!"
+   - Test API: http://localhost:5000/api/dashboard/stats
+
+6.3. MongoDB:
+   - Should connect automatically (check backend console for connection message)
+
+6.4. Ollama:
+   - Test: curl http://localhost:11434/api/tags
+   - Should return list of available models
+
+6.5. Google OAuth:
+   - Test by visiting: http://localhost:5000/login/google
+   - Should redirect to Google login
+
+
+TROUBLESHOOTING
+---------------
+1. Backend won't start:
+   - Check if port 5000 is already in use: lsof -i :5000
+   - Check MongoDB connection string
+
+2. Ollama not found:
+   - Make sure Ollama is installed and running
+   - Check: ollama serve (should start the service)
+
+3. Google OAuth errors:
+   - Verify credentials.json exists and has correct format
+   - Check redirect URI matches exactly
+   - Make sure APIs are enabled in Google Cloud Console
+
+4. Frontend can't connect to backend:
+   - Verify backend is running on port 5000
+   - Check browser console for CORS errors
+   - Verify API_BASE_URL in frontend code matches backend URL
+
+5. AI Chat not working:
+   - Verify Ollama is running: curl http://localhost:11434/api/tags
+   - Check model exists: ollama list
+   - Verify model name matches in server.js (line 363: 'llama2-short')
+
+
+PORT SUMMARY
+------------
+- Frontend: http://localhost:5173
+- Backend: http://localhost:5000
+- Ollama: http://localhost:11434
+- MongoDB: localhost:27017 (if running locally)
+
+================================================================================
+

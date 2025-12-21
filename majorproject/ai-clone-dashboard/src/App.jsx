@@ -11,6 +11,7 @@ import Team from './pages/Team';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import EmailSender from './components/EmailSender';
+import MeetingScheduler from './components/MeetingScheduler';
 
 // Import initializeGapi from your API folder
 import { initializeGapi } from "./api/googleCalendar";
@@ -27,6 +28,8 @@ const getPageTitle = (pathname) => {
       return 'Settings';
     case '/send-email':
       return 'Send Email';
+    case '/schedule-meeting':
+      return 'Schedule Meeting';
     case '/dashboard':
     default:
       return 'Dashboard';
@@ -112,6 +115,7 @@ function App() {
               <Settings aiSettings={aiSettings} setAiSettings={setAiSettings} />
             } />
             <Route path="/send-email" element={<EmailSender />} />
+            <Route path="/schedule-meeting" element={<MeetingScheduler />} />
             <Route path="*" element={<h1>404 Not Found</h1>} />
           </Routes>
         </main>

@@ -1,8 +1,17 @@
 import { gapi } from 'gapi-script';
 
-const CLIENT_ID = '"695033161929-pm35jsau87s7kbi1kj9dpa8368bvsqqu.apps.googleusercontent.com'; // Replace with your Google OAuth client ID
-const API_KEY = 'AIzaSyCpxsir2xitRYEc4z8yb53Hb9Prl7PYC6Q'; // Replace with your Google API key
+// Get credentials from environment variables (Vite requires VITE_ prefix)
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+
+// Validate that required environment variables are set
+if (!CLIENT_ID) {
+  console.error('VITE_GOOGLE_CLIENT_ID is not set in .env file');
+}
+if (!API_KEY) {
+  console.error('VITE_GOOGLE_API_KEY is not set in .env file');
+}
 
 let gapiInitialized = false;
 

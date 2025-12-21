@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { MdDashboard, MdAssignment, MdGroup, MdSettings, MdBarChart, MdEmail } from 'react-icons/md';
+import { MdDashboard, MdAssignment, MdGroup, MdSettings, MdBarChart, MdEmail, MdEvent } from 'react-icons/md';
 
 const navItems = [
   { to: '/', name: 'Dashboard', icon: <MdDashboard /> },
@@ -8,7 +8,8 @@ const navItems = [
   { to: '/team', name: 'Team', icon: <MdGroup /> },
   { to: '/analytics', name: 'Analytics', icon: <MdBarChart /> },
   { to: '/settings', name: 'Settings', icon: <MdSettings /> },
-  { to: '/send-email', name: 'Send Email', icon: <MdEmail /> }  // <-- NEW MENU ITEM
+  { to: '/send-email', name: 'Send Email', icon: <MdEmail /> },
+  { to: '/schedule-meeting', name: 'Schedule Meeting', icon: <MdEvent /> }
 ];
 
 const Sidebar = () => (

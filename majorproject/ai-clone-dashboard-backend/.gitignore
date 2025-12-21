@@ -1,0 +1,5 @@
+.env
+
+# Google OAuth credentials (NEVER COMMIT THESE!)
+credentials.json
+token.json

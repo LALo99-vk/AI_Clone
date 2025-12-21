@@ -8,6 +8,7 @@ const API_BASE_URL = 'http://localhost:5000/api';
 function Dashboard() {
   const [stats, setStats] = useState([]);
   const [recentTasks, setRecentTasks] = useState([]);
+  const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const [productivity, setProductivity] = useState({ completionRate: '0%', forecast: 'Loading...' });
   const [loading, setLoading] = useState(true);
   
@@ -33,6 +34,16 @@ function Dashboard() {
         const tasksResponse = await fetch(`${API_BASE_URL}/dashboard/recent-tasks`);
         const tasksData = await tasksResponse.json();
         setRecentTasks(tasksData);
+
+        // Fetch upcoming meetings
+        try {
+          const meetingsResponse = await fetch(`${API_BASE_URL}/meetings/upcoming`);
+          const meetingsData = await meetingsResponse.json();
+          setUpcomingMeetings(meetingsData.meetings || []);
+        } catch (meetingError) {
+          console.error('Failed to fetch meetings:', meetingError);
+          setUpcomingMeetings([]);
+        }
 
         setLoading(false);
       } catch (error) {
@@ -222,6 +233,87 @@ function Dashboard() {
               {isSending ? 'Sending...' : 'Send'}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Upcoming Meetings Section */}
+      <div className="card" style={{ marginTop: '30px' }}>
+        <h3 style={{ marginBottom: '20px' }}>📅 Upcoming Meetings</h3>
+        {upcomingMeetings.length === 0 ? (
+          <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+            No upcoming meetings. Schedule one using the AI chat or the Schedule Meeting page!
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {upcomingMeetings.map((meeting) => {
+              const startDate = new Date(meeting.start);
+              const endDate = new Date(meeting.end);
+              const isAllDay = !meeting.start.includes('T');
+              
+              return (
+                <div 
+                  key={meeting.id} 
+                  style={{ 
+                    border: '1px solid #e0e0e0', 
+                    borderRadius: '8px', 
+                    padding: '15px',
+                    backgroundColor: '#fafafa'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <h4 style={{ margin: '0 0 8px 0', color: '#262E47' }}>{meeting.summary}</h4>
+                      <p style={{ margin: '4px 0', color: '#666', fontSize: '0.9rem' }}>
+                        <strong>When:</strong> {isAllDay 
+                          ? startDate.toLocaleDateString() 
+                          : `${startDate.toLocaleString()} - ${endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        }
+                      </p>
+                      {meeting.attendees && meeting.attendees.length > 0 && (
+                        <p style={{ margin: '4px 0', color: '#666', fontSize: '0.9rem' }}>
+                          <strong>Attendees:</strong> {meeting.attendees.join(', ')}
+                        </p>
+                      )}
+                      {meeting.location && (
+                        <p style={{ margin: '4px 0', color: '#666', fontSize: '0.9rem' }}>
+                          <strong>Location:</strong> {meeting.location}
+                        </p>
+                      )}
+                    </div>
+                    {meeting.meetLink && (
+                      <a 
+                        href={meeting.meetLink} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{
+                          backgroundColor: '#4285f4',
+                          color: 'white',
+                          padding: '8px 16px',
+                          borderRadius: '5px',
+                          textDecoration: 'none',
+                          fontSize: '0.9rem',
+                          whiteSpace: 'nowrap',
+                          marginLeft: '15px'
+                        }}
+                      >
+                        Join Meet
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ marginTop: '15px', textAlign: 'center' }}>
+          <a 
+            href="https://calendar.google.com" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ color: '#5b67e0', textDecoration: 'none', fontSize: '0.9rem' }}
+          >
+            View all meetings in Google Calendar →
+          </a>
         </div>
       </div>
     </div>
