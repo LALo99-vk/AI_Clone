@@ -525,38 +525,19 @@ async function extractCalendarInfo(userPrompt) {
   const emails = userPrompt.match(emailRegex);
   const attendeeEmail = emails ? emails[0] : null;
   
-  // Extract time patterns (2pm, 14:00, tomorrow at 3pm, etc.)
-  const timePatterns = [
-    /(\d{1,2}):(\d{2})\s*(am|pm)?/i,
-    /(\d{1,2})\s*(am|pm)/i,
-    /(tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i
-  ];
-  
   // Extract summary/title
   const summaryMatch = userPrompt.match(/(?:meeting|with|about|call)\s+["']?([^"'\n]+)["']?/i);
   let summary = summaryMatch ? summaryMatch[1].trim().split(/\s+(?:at|on|with)/i)[0] : 'AI Scheduled Meeting';
-  
-  // Calculate default times (1 hour from now, 2 hours duration)
-  const defaultStart = new Date(now.getTime() + 60 * 60 * 1000);
-  const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
   
   const formatDateTime = (date) => {
     return date.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM format
   };
   
-  // If we have email, try to parse time or use defaults
-  if (attendeeEmail) {
-    return {
-      action: 'schedule_meeting',
-      summary: summary,
-      startDateTime: formatDateTime(defaultStart),
-      endDateTime: formatDateTime(defaultEnd),
-      attendeeEmail: attendeeEmail
-    };
-  }
-  
-  // Fallback to AI extraction
-  const prompt = `Extract meeting details from: "${userPrompt}". Respond ONLY with valid JSON: {"action":"schedule_meeting","summary":"meeting title","startDateTime":"2025-01-20T14:00","endDateTime":"2025-01-20T15:00","attendeeEmail":"email@example.com"}`;
+  // Try AI extraction first (more reliable for natural language)
+  const prompt = `Extract meeting details from: "${userPrompt}". 
+Today is ${now.toISOString().slice(0, 10)} and current time is ${now.toTimeString().slice(0, 5)}.
+Respond ONLY with valid JSON: {"action":"schedule_meeting","summary":"meeting title","startDateTime":"YYYY-MM-DDTHH:MM","endDateTime":"YYYY-MM-DDTHH:MM","attendeeEmail":"email@example.com"}
+Use 24-hour format for times. If date is not specified, assume today or tomorrow based on time. If time is not specified, use 1 hour from now. Duration should be 1 hour unless specified otherwise.`;
   
   try {
     const response = await axios.post('http://localhost:11434/api/generate', {
@@ -568,13 +549,105 @@ async function extractCalendarInfo(userPrompt) {
     const responseText = response.data.response.trim();
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      const extracted = JSON.parse(jsonMatch[0]);
+      
+      // Validate and use extracted data
+      if (extracted.attendeeEmail && extracted.startDateTime && extracted.endDateTime) {
+        // Use attendeeEmail from extraction, or fallback to regex extracted email
+        return {
+          action: 'schedule_meeting',
+          summary: extracted.summary || summary,
+          startDateTime: extracted.startDateTime,
+          endDateTime: extracted.endDateTime,
+          attendeeEmail: extracted.attendeeEmail || attendeeEmail
+        };
+      }
     }
-    return null;
   } catch (error) {
-    console.error('Error extracting calendar info:', error);
-    return null;
+    console.error('Error extracting calendar info with AI:', error);
   }
+  
+  // Fallback: Use regex-based extraction with improved time parsing
+  let startDateTime = null;
+  let endDateTime = null;
+  
+  // Parse time patterns (improved to handle more cases)
+  const time24Regex = /(\d{1,2}):(\d{2})/; // 14:00, 9:30
+  const time12Regex = /(\d{1,2})\s*(am|pm)/i; // 2pm, 10 am, 2 pm
+  
+  let meetingHour = null;
+  let meetingMinute = 0;
+  
+  // Try 24-hour format first (HH:MM)
+  const time24Match = userPrompt.match(time24Regex);
+  if (time24Match) {
+    meetingHour = parseInt(time24Match[1]);
+    meetingMinute = parseInt(time24Match[2]);
+    // Validate hour (0-23) and minute (0-59)
+    if (meetingHour > 23 || meetingMinute > 59) {
+      meetingHour = null;
+      meetingMinute = 0;
+    }
+  } else {
+    // Try 12-hour format
+    const time12Match = userPrompt.match(time12Regex);
+    if (time12Match) {
+      meetingHour = parseInt(time12Match[1]);
+      const ampm = time12Match[2].toLowerCase();
+      // Validate hour (1-12)
+      if (meetingHour >= 1 && meetingHour <= 12) {
+        if (ampm === 'pm' && meetingHour !== 12) {
+          meetingHour += 12;
+        } else if (ampm === 'am' && meetingHour === 12) {
+          meetingHour = 0;
+        }
+      } else {
+        meetingHour = null;
+      }
+    }
+  }
+  
+  // Parse date patterns
+  let meetingDate = new Date(now);
+  const tomorrowMatch = userPrompt.match(/\btomorrow\b/i);
+  const todayMatch = userPrompt.match(/\btoday\b/i);
+  
+  if (tomorrowMatch) {
+    meetingDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  } else if (todayMatch) {
+    meetingDate = new Date(now);
+  }
+  
+  // If we found a time, use it; otherwise default to 1 hour from now
+  if (meetingHour !== null) {
+    meetingDate.setHours(meetingHour, meetingMinute, 0, 0);
+    // If the time has passed today and not explicitly "tomorrow", assume tomorrow
+    if (meetingDate < now && !tomorrowMatch && !todayMatch) {
+      meetingDate = new Date(meetingDate.getTime() + 24 * 60 * 60 * 1000);
+    }
+    startDateTime = formatDateTime(meetingDate);
+    endDateTime = formatDateTime(new Date(meetingDate.getTime() + 60 * 60 * 1000)); // 1 hour later
+  } else {
+    // Default: 1 hour from now
+    const defaultStart = new Date(now.getTime() + 60 * 60 * 1000);
+    const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
+    startDateTime = formatDateTime(defaultStart);
+    endDateTime = formatDateTime(defaultEnd);
+  }
+  
+  // Return result (use attendeeEmail from regex if AI didn't provide it)
+  if (attendeeEmail) {
+    return {
+      action: 'schedule_meeting',
+      summary: summary,
+      startDateTime: startDateTime,
+      endDateTime: endDateTime,
+      attendeeEmail: attendeeEmail
+    };
+  }
+  
+  // If no email found at all, return null
+  return null;
 }
 
 // Available team members for delegation
@@ -582,12 +655,33 @@ const TEAM_MEMBERS = ['Anika', 'Riya', 'Rahul', 'Priya'];
 
 // Helper function to extract task delegation information with regex fallback
 async function extractTaskInfo(userPrompt) {
-  // Extract assignee name (look for team member names)
+  // Extract assignee name - FIRST try to extract any name after "to" keyword
   let assignee = null;
-  for (const member of TEAM_MEMBERS) {
-    if (userPrompt.toLowerCase().includes(member.toLowerCase())) {
-      assignee = member;
+  
+  // PRIORITY 1: Extract name after "to" keyword (e.g., "assign task to gokul", "assign "task" to gokul")
+  // Handle patterns like: ...to name, ...to "name", ...to 'name'
+  const toPatterns = [
+    /\bto\s+([a-zA-Z]+)/i,           // "to gokul"
+    /\bto\s+["']([^"']+)["']/i,      // 'to "gokul"'
+  ];
+  
+  for (const pattern of toPatterns) {
+    const match = userPrompt.match(pattern);
+    if (match && match[1]) {
+      assignee = match[1].trim();
+      // Capitalize first letter
+      assignee = assignee.charAt(0).toUpperCase() + assignee.slice(1).toLowerCase();
       break;
+    }
+  }
+  
+  // PRIORITY 2: If no "to" pattern found, check for known team member names (for backward compatibility)
+  if (!assignee) {
+    for (const member of TEAM_MEMBERS) {
+      if (userPrompt.toLowerCase().includes(member.toLowerCase())) {
+        assignee = member;
+        break;
+      }
     }
   }
   
