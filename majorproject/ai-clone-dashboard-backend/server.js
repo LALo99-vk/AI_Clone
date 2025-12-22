@@ -530,50 +530,24 @@ async function extractCalendarInfo(userPrompt) {
   let summary = summaryMatch ? summaryMatch[1].trim().split(/\s+(?:at|on|with)/i)[0] : 'AI Scheduled Meeting';
   
   const formatDateTime = (date) => {
-    return date.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM format
+    // Format as local time (don't convert to UTC)
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`; // YYYY-MM-DDTHH:MM format (local time)
   };
   
-  // Try AI extraction first (more reliable for natural language)
-  const prompt = `Extract meeting details from: "${userPrompt}". 
-Today is ${now.toISOString().slice(0, 10)} and current time is ${now.toTimeString().slice(0, 5)}.
-Respond ONLY with valid JSON: {"action":"schedule_meeting","summary":"meeting title","startDateTime":"YYYY-MM-DDTHH:MM","endDateTime":"YYYY-MM-DDTHH:MM","attendeeEmail":"email@example.com"}
-Use 24-hour format for times. If date is not specified, assume today or tomorrow based on time. If time is not specified, use 1 hour from now. Duration should be 1 hour unless specified otherwise.`;
-  
-  try {
-    const response = await axios.post('http://localhost:11434/api/generate', {
-      model: 'llama2-short',
-      prompt: prompt,
-      stream: false
-    });
-    
-    const responseText = response.data.response.trim();
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const extracted = JSON.parse(jsonMatch[0]);
-      
-      // Validate and use extracted data
-      if (extracted.attendeeEmail && extracted.startDateTime && extracted.endDateTime) {
-        // Use attendeeEmail from extraction, or fallback to regex extracted email
-        return {
-          action: 'schedule_meeting',
-          summary: extracted.summary || summary,
-          startDateTime: extracted.startDateTime,
-          endDateTime: extracted.endDateTime,
-          attendeeEmail: extracted.attendeeEmail || attendeeEmail
-        };
-      }
-    }
-  } catch (error) {
-    console.error('Error extracting calendar info with AI:', error);
-  }
-  
-  // Fallback: Use regex-based extraction with improved time parsing
+  // PRIORITY 1: Use regex-based extraction FIRST (more reliable for time parsing)
   let startDateTime = null;
   let endDateTime = null;
   
   // Parse time patterns (improved to handle more cases)
-  const time24Regex = /(\d{1,2}):(\d{2})/; // 14:00, 9:30
-  const time12Regex = /(\d{1,2})\s*(am|pm)/i; // 2pm, 10 am, 2 pm
+  // Match times like: 14:00, 9:30, 14:30, 09:00
+  const time24Regex = /\b(\d{1,2}):(\d{2})\b/; // 14:00, 9:30
+  // Match times like: 2pm, 10am, 2 pm, 10 am, 2:30pm, 10:30am
+  const time12Regex = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i; // 2pm, 10am, 2:30pm
   
   let meetingHour = null;
   let meetingMinute = 0;
@@ -582,9 +556,11 @@ Use 24-hour format for times. If date is not specified, assume today or tomorrow
   const time24Match = userPrompt.match(time24Regex);
   if (time24Match) {
     meetingHour = parseInt(time24Match[1]);
-    meetingMinute = parseInt(time24Match[2]);
+    meetingMinute = parseInt(time24Match[2] || '0');
     // Validate hour (0-23) and minute (0-59)
-    if (meetingHour > 23 || meetingMinute > 59) {
+    if (meetingHour <= 23 && meetingMinute <= 59) {
+      // Valid time found
+    } else {
       meetingHour = null;
       meetingMinute = 0;
     }
@@ -593,9 +569,10 @@ Use 24-hour format for times. If date is not specified, assume today or tomorrow
     const time12Match = userPrompt.match(time12Regex);
     if (time12Match) {
       meetingHour = parseInt(time12Match[1]);
-      const ampm = time12Match[2].toLowerCase();
-      // Validate hour (1-12)
-      if (meetingHour >= 1 && meetingHour <= 12) {
+      meetingMinute = parseInt(time12Match[2] || '0');
+      const ampm = time12Match[3].toLowerCase();
+      // Validate hour (1-12) and minute (0-59)
+      if (meetingHour >= 1 && meetingHour <= 12 && meetingMinute <= 59) {
         if (ampm === 'pm' && meetingHour !== 12) {
           meetingHour += 12;
         } else if (ampm === 'am' && meetingHour === 12) {
@@ -603,6 +580,7 @@ Use 24-hour format for times. If date is not specified, assume today or tomorrow
         }
       } else {
         meetingHour = null;
+        meetingMinute = 0;
       }
     }
   }
@@ -618,7 +596,7 @@ Use 24-hour format for times. If date is not specified, assume today or tomorrow
     meetingDate = new Date(now);
   }
   
-  // If we found a time, use it; otherwise default to 1 hour from now
+  // If we found a time with regex, use it
   if (meetingHour !== null) {
     meetingDate.setHours(meetingHour, meetingMinute, 0, 0);
     // If the time has passed today and not explicitly "tomorrow", assume tomorrow
@@ -627,8 +605,57 @@ Use 24-hour format for times. If date is not specified, assume today or tomorrow
     }
     startDateTime = formatDateTime(meetingDate);
     endDateTime = formatDateTime(new Date(meetingDate.getTime() + 60 * 60 * 1000)); // 1 hour later
-  } else {
-    // Default: 1 hour from now
+    console.log(`[Calendar] Extracted time via regex: ${meetingHour}:${String(meetingMinute).padStart(2, '0')} → ${startDateTime}`);
+  }
+  
+  // PRIORITY 2: If regex didn't find time, try AI extraction
+  if (meetingHour === null) {
+    console.log('[Calendar] No time found via regex, trying AI extraction...');
+    const prompt = `Extract meeting details from: "${userPrompt}". 
+Today is ${now.toISOString().slice(0, 10)} and current time is ${now.toTimeString().slice(0, 5)}.
+Respond ONLY with valid JSON: {"action":"schedule_meeting","summary":"meeting title","startDateTime":"YYYY-MM-DDTHH:MM","endDateTime":"YYYY-MM-DDTHH:MM","attendeeEmail":"email@example.com"}
+Use 24-hour format for times. If date is not specified, assume today or tomorrow based on time. If time is not specified, use 1 hour from now. Duration should be 1 hour unless specified otherwise.`;
+    
+    try {
+      const response = await axios.post('http://localhost:11434/api/generate', {
+        model: 'llama2-short',
+        prompt: prompt,
+        stream: false
+      });
+      
+      const responseText = response.data.response.trim();
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const extracted = JSON.parse(jsonMatch[0]);
+        
+        // Validate extracted times - reject if they look like defaults (e.g., 19:00/7pm)
+        if (extracted.startDateTime && extracted.endDateTime) {
+          const extractedTime = extracted.startDateTime.match(/(\d{2}):(\d{2})/);
+          if (extractedTime) {
+            const hour = parseInt(extractedTime[1]);
+            const minute = parseInt(extractedTime[2]);
+            // Check if user explicitly mentioned a time in the prompt
+            const hasTimeInPrompt = /\b(\d{1,2}):(\d{2})\b|\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.test(userPrompt);
+            // Only use AI extraction if:
+            // 1. User mentioned a time explicitly, OR
+            // 2. The extracted time is not 19:00/7pm (common default)
+            if (hasTimeInPrompt || hour !== 19) {
+              startDateTime = extracted.startDateTime;
+              endDateTime = extracted.endDateTime;
+              console.log(`[Calendar] Extracted time via AI: ${startDateTime}`);
+            } else {
+              console.log(`[Calendar] Rejected AI-extracted time ${hour}:${minute} (looks like default)`);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting calendar info with AI:', error);
+    }
+  }
+  
+  // PRIORITY 3: If still no time found, use default (1 hour from now)
+  if (!startDateTime || !endDateTime) {
     const defaultStart = new Date(now.getTime() + 60 * 60 * 1000);
     const defaultEnd = new Date(defaultStart.getTime() + 60 * 60 * 1000);
     startDateTime = formatDateTime(defaultStart);
