@@ -412,20 +412,78 @@ async function extractEmailInfo(userPrompt) {
   const emails = userPrompt.match(emailRegex);
   const emailAddress = emails ? emails[0] : null;
   
-  // Extract subject (look for "subject:", "about:", "re:")
-  const subjectMatch = userPrompt.match(/(?:subject|about|re):\s*["']?([^"'\n]+)["']?/i);
-  const subject = subjectMatch ? subjectMatch[1].trim() : null;
+  let subject = null;
+  let body = null;
   
-  // Extract body/content (everything after "saying", "message", "content", "body")
-  const bodyMatch = userPrompt.match(/(?:saying|message|content|body|says?|write|tell):\s*["']?([^"']+)["']?/i);
-  let body = bodyMatch ? bodyMatch[1].trim() : null;
+  // PRIORITY 1: Extract content inside double quotes - this is the email message
+  const doubleQuoteMatch = userPrompt.match(/"([^"]+)"/);
+  if (doubleQuoteMatch) {
+    body = doubleQuoteMatch[1].trim();
+  }
   
-  // If no explicit body found, try to get text after email/subject
+  // PRIORITY 2: Extract content inside single quotes (if no double quotes found)
+  if (!body) {
+    const singleQuoteMatch = userPrompt.match(/'([^']+)'/);
+    if (singleQuoteMatch) {
+      body = singleQuoteMatch[1].trim();
+    }
+  }
+  
+  // PRIORITY 3: Extract content after "about" - this is typically the email body
+  // Handle patterns like: about..."content", about: "content", about "content"
+  if (!body) {
+    const aboutMatch = userPrompt.match(/about[:\s\.]*["']?([^"']+)["']?/i);
+    if (aboutMatch) {
+      // Clean up the extracted content: remove quotes, extra dots, etc.
+      body = aboutMatch[1]
+        .replace(/^\.\.\.+/, '') // Remove leading dots like "..."
+        .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
+        .trim();
+    }
+  }
+  
+  // PRIORITY 4: Extract content after "saying", "message", "content", "body", "write", "tell"
+  if (!body) {
+    const bodyMatch = userPrompt.match(/(?:saying|message|content|body|says?|write|tell)[:\s]*["']?([^"']+)["']?/i);
+    if (bodyMatch) {
+      body = bodyMatch[1]
+        .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
+        .trim();
+    }
+  }
+  
+  // Extract explicit subject (only if explicitly stated)
+  const subjectMatch = userPrompt.match(/(?:subject|re)[:\s]*["']?([^"'\n]+)["']?/i);
+  if (subjectMatch && !aboutMatch) {
+    subject = subjectMatch[1]
+      .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
+      .trim();
+  }
+  
+  // If no explicit body found, try to get text after email
   if (!body && emailAddress) {
     const afterEmail = userPrompt.split(emailAddress)[1];
-    if (afterEmail && afterEmail.trim().length > 10) {
-      body = afterEmail.trim().split(/\s+(?:subject|about):/i)[0].trim();
+    if (afterEmail) {
+      // Remove common command keywords and extract clean content
+      let cleanContent = afterEmail
+        .replace(/(?:send|email|to|about|subject|saying|message)[:\s]*/gi, '')
+        .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
+        .replace(/^\.\.\.+/, '') // Remove leading dots
+        .trim();
+      
+      // Only use if it looks like actual content (not just command structure)
+      if (cleanContent && cleanContent.length > 3 && !/^(about|subject|saying|message)[:\s]/i.test(cleanContent)) {
+        body = cleanContent;
+      }
     }
+  }
+  
+  // Clean up body: remove any remaining command structure
+  if (body) {
+    body = body
+      .replace(/^(about|subject|saying|message|write|tell)[:\s]*/i, '') // Remove leading keywords
+      .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
+      .trim();
   }
   
   // If we have enough info from regex, use it
@@ -434,7 +492,7 @@ async function extractEmailInfo(userPrompt) {
       action: 'send_email',
       to: emailAddress,
       subject: subject || 'AI Generated Email',
-      body: body || userPrompt.replace(emailAddress, '').replace(subject || '', '').trim() || 'No content provided'
+      body: body || 'No content provided'
     };
   }
   
@@ -550,45 +608,82 @@ async function extractTaskInfo(userPrompt) {
     /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i
   ];
   
-  // Try to extract task description (everything after "assign", "delegate", "task", "give")
-  const taskKeywords = ['assign', 'delegate', 'task', 'give', 'create', 'new task'];
+  // PRIORITY 1: Extract content inside double quotes - this is the task description
   let taskDescription = null;
+  const doubleQuoteMatch = userPrompt.match(/"([^"]+)"/);
+  if (doubleQuoteMatch) {
+    taskDescription = doubleQuoteMatch[1].trim();
+  }
   
-  for (const keyword of taskKeywords) {
-    const match = userPrompt.match(new RegExp(`${keyword}\\s+(?:to\\s+\\w+\\s+)?(.+?)(?:\\s+to\\s+|\\s+for\\s+|$)`, 'i'));
-    if (match && match[1]) {
-      taskDescription = match[1].trim();
-      // Remove assignee name if included
-      if (assignee) {
-        taskDescription = taskDescription.replace(new RegExp(assignee, 'gi'), '').trim();
-      }
-      break;
+  // PRIORITY 2: Extract content inside single quotes (if no double quotes found)
+  if (!taskDescription) {
+    const singleQuoteMatch = userPrompt.match(/'([^']+)'/);
+    if (singleQuoteMatch) {
+      taskDescription = singleQuoteMatch[1].trim();
     }
   }
   
-  // If no keyword match, try to extract text after common patterns
+  // PRIORITY 3: Try to extract task description (everything after "assign", "delegate", "task", "give")
+  if (!taskDescription) {
+    const taskKeywords = ['assign', 'delegate', 'task', 'give', 'create', 'new task'];
+    
+    for (const keyword of taskKeywords) {
+      const match = userPrompt.match(new RegExp(`${keyword}\\s+(?:to\\s+\\w+\\s+)?(.+?)(?:\\s+to\\s+|\\s+for\\s+|$)`, 'i'));
+      if (match && match[1]) {
+        taskDescription = match[1].trim();
+        // Remove assignee name if included
+        if (assignee) {
+          taskDescription = taskDescription.replace(new RegExp(assignee, 'gi'), '').trim();
+        }
+        // Clean up: remove any remaining command keywords and quotes
+        taskDescription = taskDescription
+          .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
+          .replace(/\b(assign|delegate|task|to|give|create|new)\b/gi, '')
+          .trim();
+        break;
+      }
+    }
+  }
+  
+  // PRIORITY 4: Try other common patterns
   if (!taskDescription) {
     const patterns = [
       /(?:assign|delegate|give|create|add)\s+(.+)/i,
-      /task:\s*(.+)/i,
-      /"([^"]+)"/,  // Text in quotes
-      /'([^']+)'/   // Text in single quotes
+      /task:\s*(.+)/i
     ];
     
     for (const pattern of patterns) {
       const match = userPrompt.match(pattern);
       if (match && match[1]) {
         taskDescription = match[1].trim();
+        // Remove assignee name if included
+        if (assignee) {
+          taskDescription = taskDescription.replace(new RegExp(assignee, 'gi'), '').trim();
+        }
+        // Clean up: remove any remaining command keywords and quotes
+        taskDescription = taskDescription
+          .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
+          .replace(/\b(assign|delegate|task|to|give|create|new)\b/gi, '')
+          .trim();
         break;
       }
     }
   }
   
-  // If still no task description, use the whole prompt minus assignee and keywords
+  // PRIORITY 5: Use the whole prompt minus assignee and keywords (last resort)
   if (!taskDescription) {
     taskDescription = userPrompt
       .replace(/\b(assign|delegate|task|to|give|create|new)\b/gi, '')
       .replace(new RegExp(assignee || '', 'gi'), '')
+      .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
+      .trim();
+  }
+  
+  // Final cleanup: remove any remaining command structure
+  if (taskDescription) {
+    taskDescription = taskDescription
+      .replace(/^(assign|delegate|task|to|give|create|new)[:\s]*/i, '') // Remove leading keywords
+      .replace(/^["']+/, '').replace(/["']+$/, '') // Remove surrounding quotes
       .trim();
   }
   
