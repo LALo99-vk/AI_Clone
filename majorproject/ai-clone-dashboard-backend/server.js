@@ -819,7 +819,16 @@ async function extractTaskInfo(userPrompt) {
 
 // Helper function to detect user intent using AI
 async function detectIntent(userPrompt) {
-  const lowerPrompt = userPrompt.toLowerCase();
+  const lowerPrompt = userPrompt.toLowerCase().trim();
+  
+  // Skip AI detection for very short/simple queries (greetings, simple questions)
+  // This significantly speeds up response time for common queries like "hi", "hello", "how are you"
+  const isSimpleQuery = lowerPrompt.length < 50 && 
+    !/\b(assign|delegate|send|email|schedule|meeting|task|calendar)\b/i.test(userPrompt);
+  
+  if (isSimpleQuery) {
+    return 'chat'; // Skip AI intent detection for simple queries - go straight to chat
+  }
   
   // Quick keyword-based detection first (faster than AI) - MUST be strict to avoid false positives
   // Only detect delegation if explicit action words are present
@@ -845,7 +854,8 @@ async function detectIntent(userPrompt) {
     return 'calendar';
   }
   
-  // Fallback to AI detection for ambiguous cases - but make it more strict
+  // Only use AI detection for complex/ambiguous queries (not simple ones)
+  // This avoids slow AI calls for straightforward questions
   const prompt = `Analyze this user request and determine the PRIMARY action intent: "${userPrompt}"
 
 Options:
@@ -1162,6 +1172,10 @@ app.post('/api/ai/chat', async (req, res) => {
     }
     
     // Default chat response - use regular llama2 for better conversational responses
+    // Optimize for simple queries (fewer tokens = faster response)
+    const isSimpleQuery = userPrompt.trim().length < 50 && 
+      !/\b(explain|describe|tell me about|how does|what is|why)\b/i.test(userPrompt.toLowerCase());
+    
     const chatPrompt = `You are a helpful and friendly AI assistant integrated into a productivity dashboard. You help users with questions, provide insights, and assist with their work tasks. Be conversational, clear, and helpful.
 
 User: ${userPrompt}
@@ -1169,15 +1183,22 @@ User: ${userPrompt}
 Assistant:`;
     
     try {
+      // Use faster settings for simple queries (fewer tokens, shorter response)
+      const responseOptions = isSimpleQuery ? {
+        temperature: 0.7,
+        top_p: 0.9,
+        num_predict: 100 // Shorter responses for simple queries = faster
+      } : {
+        temperature: 0.7,
+        top_p: 0.9,
+        num_predict: 500 // Longer responses for complex queries
+      };
+      
       const response = await axios.post('http://localhost:11434/api/generate', {
         model: 'llama2', // Use regular llama2 for conversational chat, not llama2-short
         prompt: chatPrompt,
         stream: false,
-        options: {
-          temperature: 0.7, // Higher temperature for more natural, varied responses
-          top_p: 0.9,
-          num_predict: 500 // Allow longer responses for better conversation
-        }
+        options: responseOptions
       });
       
       let aiResponse = response.data.response?.trim() || 'I apologize, but I could not generate a response. Please try again.';
