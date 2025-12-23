@@ -821,22 +821,40 @@ async function extractTaskInfo(userPrompt) {
 async function detectIntent(userPrompt) {
   const lowerPrompt = userPrompt.toLowerCase();
   
-  // Quick keyword-based detection first (faster than AI)
-  if (/\b(assign|delegate|task|give.*task|create.*task|new task)\b/i.test(userPrompt)) {
+  // Quick keyword-based detection first (faster than AI) - MUST be strict to avoid false positives
+  // Only detect delegation if explicit action words are present
+  if (/\b(assign|delegate|give|create|add)\s+(?:a\s+)?(?:new\s+)?task\b/i.test(userPrompt) || 
+      /\b(assign|delegate)\s+.+\s+(?:to|for)\s+/i.test(userPrompt) ||
+      /\b(assign|delegate)\b/i.test(userPrompt) ||
+      /\btask\s+(?:for|to|assign|delegate)\s+/i.test(userPrompt)) {
     return 'delegate';
   }
   
-  if (/\b(email|mail|send.*email|write.*email)\b/i.test(userPrompt)) {
+  // Email detection - look for explicit email action words
+  if (/\b(send|write|compose|create)\s+(?:an\s+)?(?:email|mail|message)\b/i.test(userPrompt) ||
+      /\b(send|write)\s+.+\s+(?:email|mail)\b/i.test(userPrompt) ||
+      /\bemail\s+(?:to|for)\s+/i.test(userPrompt)) {
     return 'email';
   }
   
-  if (/\b(calendar|meeting|schedule|book.*calendar|set up.*meeting)\b/i.test(userPrompt)) {
+  // Calendar/meeting detection - look for explicit scheduling words
+  if (/\b(schedule|book|set\s+up|create)\s+(?:a\s+)?(?:meeting|event|appointment|call)\b/i.test(userPrompt) ||
+      /\b(schedule|book)\s+.+\s+(?:meeting|event|appointment)\b/i.test(userPrompt) ||
+      /\bmeeting\s+(?:with|at|on|for)\s+/i.test(userPrompt) ||
+      /\bcalendar\s+(?:for|with|on)\s+/i.test(userPrompt)) {
     return 'calendar';
   }
   
-  // Fallback to AI detection for ambiguous cases
-  const prompt = `Analyze this request and determine the action: "${userPrompt}".
-Respond with ONLY one word: "delegate" if it's about assigning/delegating a task, "email" if it's about sending/writing an email, "calendar" if it's about scheduling a meeting/event, or "chat" for general conversation.`;
+  // Fallback to AI detection for ambiguous cases - but make it more strict
+  const prompt = `Analyze this user request and determine the PRIMARY action intent: "${userPrompt}"
+
+Options:
+- "delegate" ONLY if the user explicitly wants to assign/delegate/create a task for someone
+- "email" ONLY if the user explicitly wants to send/write/compose an email to someone
+- "calendar" ONLY if the user explicitly wants to schedule/book/create a meeting/event
+- "chat" for everything else (questions, general conversation, information requests)
+
+Respond with ONLY the single word (delegate, email, calendar, or chat):`;
   
   try {
     const response = await axios.post('http://localhost:11434/api/generate', {
@@ -846,13 +864,30 @@ Respond with ONLY one word: "delegate" if it's about assigning/delegating a task
     });
     
     const intent = response.data.response.trim().toLowerCase();
-    if (intent.includes('delegate') || intent.includes('assign') || intent.includes('task')) return 'delegate';
-    if (intent.includes('email') || intent.includes('mail')) return 'email';
-    if (intent.includes('calendar') || intent.includes('meeting') || intent.includes('schedule')) return 'calendar';
+    
+    // Be more strict - only return specific intent if response starts with that word or is exactly that word
+    if (intent === 'delegate' || intent.startsWith('delegate') || intent === 'assign') {
+      // Double-check with regex that this is really about task delegation
+      if (/\b(assign|delegate|task)\b/i.test(userPrompt)) {
+        return 'delegate';
+      }
+    }
+    if (intent === 'email' || intent.startsWith('email') || intent === 'mail') {
+      if (/\b(email|mail|send)\b/i.test(userPrompt)) {
+        return 'email';
+      }
+    }
+    if (intent === 'calendar' || intent.startsWith('calendar') || intent === 'meeting' || intent === 'schedule') {
+      if (/\b(meeting|schedule|calendar)\b/i.test(userPrompt)) {
+        return 'calendar';
+      }
+    }
+    
+    // Default to chat for everything else
     return 'chat';
   } catch (error) {
     console.error('Error detecting intent:', error);
-    return 'chat';
+    return 'chat'; // Default to chat on error
   }
 }
 
@@ -1126,14 +1161,40 @@ app.post('/api/ai/chat', async (req, res) => {
       }
     }
     
-    // Default chat response
-    const prompt = `You are a helpful AI assistant. User input: ${userPrompt}`;
-    const response = await axios.post('http://localhost:11434/api/generate', {
-      model: 'llama2-short',
-      prompt: prompt,
-      stream: false
-    });
-    res.json({ response: response.data.response });
+    // Default chat response - use regular llama2 for better conversational responses
+    const chatPrompt = `You are a helpful and friendly AI assistant integrated into a productivity dashboard. You help users with questions, provide insights, and assist with their work tasks. Be conversational, clear, and helpful.
+
+User: ${userPrompt}
+
+Assistant:`;
+    
+    try {
+      const response = await axios.post('http://localhost:11434/api/generate', {
+        model: 'llama2', // Use regular llama2 for conversational chat, not llama2-short
+        prompt: chatPrompt,
+        stream: false,
+        options: {
+          temperature: 0.7, // Higher temperature for more natural, varied responses
+          top_p: 0.9,
+          num_predict: 500 // Allow longer responses for better conversation
+        }
+      });
+      
+      let aiResponse = response.data.response?.trim() || 'I apologize, but I could not generate a response. Please try again.';
+      
+      // Clean up response if needed
+      if (aiResponse.startsWith('Assistant:')) {
+        aiResponse = aiResponse.replace(/^Assistant:\s*/i, '').trim();
+      }
+      
+      res.json({ response: aiResponse });
+    } catch (chatError) {
+      console.error('Error generating chat response:', chatError);
+      // Fallback to a simple response if llama2 is not available
+      res.json({ 
+        response: 'I\'m here to help! You can ask me questions, ask me to send emails, schedule meetings, or assign tasks. How can I assist you today?' 
+      });
+    }
     
   } catch (error) {
     console.error('AI chat error:', error);

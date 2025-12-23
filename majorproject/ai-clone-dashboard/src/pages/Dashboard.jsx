@@ -105,11 +105,16 @@ function Dashboard() {
         body: JSON.stringify({ prompt: chatPrompt }),
       });
 
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
       const data = await response.json();
-      setChatResponse(data.response); // Display simulated AI response
+      setChatResponse(data.response || 'I apologize, but I could not generate a response. Please try again.');
       setChatPrompt('');
     } catch (error) {
-      setChatResponse('Error: Could not connect to AI service.');
+      console.error('Chat error:', error);
+      setChatResponse('Sorry, I encountered an error. Please check if the backend server is running and try again.');
     } finally {
       setIsSending(false);
     }
@@ -212,9 +217,9 @@ function Dashboard() {
           <div className="ai-chat-box">
             {/* Display AI Response */}
             {chatResponse && (
-              <div style={{ backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '6px', marginBottom: '10px', fontSize: '0.9rem' }}>
-                <p style={{ fontWeight: 600, color: '#5b67e0' }}>AI:</p>
-                <p>{chatResponse}</p>
+              <div style={{ backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '6px', marginBottom: '10px', fontSize: '0.9rem', maxHeight: '300px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                <p style={{ fontWeight: 600, color: '#5b67e0', marginBottom: '5px' }}>AI:</p>
+                <div style={{ lineHeight: '1.6' }}>{chatResponse}</div>
               </div>
             )}
             
