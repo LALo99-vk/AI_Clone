@@ -901,7 +901,65 @@ Respond with ONLY the single word (delegate, email, calendar, or chat):`;
   }
 }
 
+// Fast chat endpoint - for general questions only (no intent detection, instant responses)
 app.post('/api/ai/chat', async (req, res) => {
+  const userPrompt = req.body.prompt || '';
+  
+  try {
+    // Direct chat response - no intent detection for faster responses
+    // Optimize for simple queries (fewer tokens = faster response)
+    const isSimpleQuery = userPrompt.trim().length < 50 && 
+      !/\b(explain|describe|tell me about|how does|what is|why)\b/i.test(userPrompt.toLowerCase());
+    
+    const chatPrompt = `You are a helpful and friendly AI assistant. Answer questions clearly and concisely. Be conversational and helpful.
+
+User: ${userPrompt}
+
+Assistant:`;
+    
+    try {
+      // Use faster settings for simple queries (fewer tokens, shorter response)
+      const responseOptions = isSimpleQuery ? {
+        temperature: 0.7,
+        top_p: 0.9,
+        num_predict: 100 // Shorter responses for simple queries = faster
+      } : {
+        temperature: 0.7,
+        top_p: 0.9,
+        num_predict: 300 // Moderate responses for complex queries
+      };
+      
+      const response = await axios.post('http://localhost:11434/api/generate', {
+        model: 'llama2', // Use regular llama2 for conversational chat
+        prompt: chatPrompt,
+        stream: false,
+        options: responseOptions
+      });
+      
+      let aiResponse = response.data.response?.trim() || 'I apologize, but I could not generate a response. Please try again.';
+      
+      // Clean up response if needed
+      if (aiResponse.startsWith('Assistant:')) {
+        aiResponse = aiResponse.replace(/^Assistant:\s*/i, '').trim();
+      }
+      
+      res.json({ response: aiResponse });
+    } catch (chatError) {
+      console.error('Error generating chat response:', chatError);
+      // Fallback to a simple response if llama2 is not available
+      res.json({ 
+        response: 'I\'m here to help! Ask me anything and I\'ll do my best to answer.' 
+      });
+    }
+    
+  } catch (error) {
+    console.error('AI chat error:', error);
+    res.status(500).json({ response: 'Error: ' + (error.message || 'Something went wrong') });
+  }
+});
+
+// Task chatbot endpoint - for email, calendar, delegation (with intent detection)
+app.post('/api/ai/tasks', async (req, res) => {
   const userPrompt = req.body.prompt || '';
   
   try {
@@ -1171,54 +1229,13 @@ app.post('/api/ai/chat', async (req, res) => {
       }
     }
     
-    // Default chat response - use regular llama2 for better conversational responses
-    // Optimize for simple queries (fewer tokens = faster response)
-    const isSimpleQuery = userPrompt.trim().length < 50 && 
-      !/\b(explain|describe|tell me about|how does|what is|why)\b/i.test(userPrompt.toLowerCase());
-    
-    const chatPrompt = `You are a helpful and friendly AI assistant integrated into a productivity dashboard. You help users with questions, provide insights, and assist with their work tasks. Be conversational, clear, and helpful.
-
-User: ${userPrompt}
-
-Assistant:`;
-    
-    try {
-      // Use faster settings for simple queries (fewer tokens, shorter response)
-      const responseOptions = isSimpleQuery ? {
-        temperature: 0.7,
-        top_p: 0.9,
-        num_predict: 100 // Shorter responses for simple queries = faster
-      } : {
-        temperature: 0.7,
-        top_p: 0.9,
-        num_predict: 500 // Longer responses for complex queries
-      };
-      
-      const response = await axios.post('http://localhost:11434/api/generate', {
-        model: 'llama2', // Use regular llama2 for conversational chat, not llama2-short
-        prompt: chatPrompt,
-        stream: false,
-        options: responseOptions
-      });
-      
-      let aiResponse = response.data.response?.trim() || 'I apologize, but I could not generate a response. Please try again.';
-      
-      // Clean up response if needed
-      if (aiResponse.startsWith('Assistant:')) {
-        aiResponse = aiResponse.replace(/^Assistant:\s*/i, '').trim();
-      }
-      
-      res.json({ response: aiResponse });
-    } catch (chatError) {
-      console.error('Error generating chat response:', chatError);
-      // Fallback to a simple response if llama2 is not available
-      res.json({ 
-        response: 'I\'m here to help! You can ask me questions, ask me to send emails, schedule meetings, or assign tasks. How can I assist you today?' 
-      });
-    }
+    // If no specific intent matched, return a helpful message
+    return res.json({ 
+      response: 'I can help you with: sending/reading emails, scheduling meetings, or assigning tasks. Please specify what you\'d like me to do.' 
+    });
     
   } catch (error) {
-    console.error('AI chat error:', error);
+    console.error('AI tasks error:', error);
     res.status(500).json({ response: 'Error: ' + (error.message || 'Something went wrong') });
   }
 });

@@ -18,10 +18,15 @@ function Dashboard() {
     assignee: 'Anika', // Default assignee (Assuming Anika is a default team member)
   });
 
-  // State for AI Chat
+  // State for General AI Chat (fast, for questions)
   const [chatPrompt, setChatPrompt] = useState('');
-  const [chatResponse, setChatResponse] = useState('Welcome! Ask me for a productivity insight.');
-  const [isSending, setIsSending] = useState(false);
+  const [chatResponse, setChatResponse] = useState('Hi! Ask me anything and I\'ll answer instantly.');
+  const [isSendingChat, setIsSendingChat] = useState(false);
+
+  // State for Task AI Chat (for email, calendar, delegation)
+  const [taskPrompt, setTaskPrompt] = useState('');
+  const [taskResponse, setTaskResponse] = useState('I can help you send emails, schedule meetings, or assign tasks. What would you like me to do?');
+  const [isSendingTask, setIsSendingTask] = useState(false);
 
 
   const fetchData = async () => {
@@ -91,12 +96,12 @@ function Dashboard() {
     }
   };
 
-  // --- 2. AI Chat Handler (POST) ---
+  // --- 2. General AI Chat Handler (fast, for questions) ---
   const handleSendChat = async () => {
     if (!chatPrompt.trim()) return;
 
-    setIsSending(true);
-    setChatResponse('AI is thinking...');
+    setIsSendingChat(true);
+    setChatResponse('Thinking...');
 
     try {
       const response = await fetch(`${API_BASE_URL}/ai/chat`, {
@@ -116,7 +121,36 @@ function Dashboard() {
       console.error('Chat error:', error);
       setChatResponse('Sorry, I encountered an error. Please check if the backend server is running and try again.');
     } finally {
-      setIsSending(false);
+      setIsSendingChat(false);
+    }
+  };
+
+  // --- 3. Task AI Chat Handler (for email, calendar, delegation) ---
+  const handleSendTask = async () => {
+    if (!taskPrompt.trim()) return;
+
+    setIsSendingTask(true);
+    setTaskResponse('Processing your request...');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: taskPrompt }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setTaskResponse(data.response || 'I apologize, but I could not process your request. Please try again.');
+      setTaskPrompt('');
+    } catch (error) {
+      console.error('Task chat error:', error);
+      setTaskResponse('Sorry, I encountered an error. Please check if the backend server is running and try again.');
+    } finally {
+      setIsSendingTask(false);
     }
   };
 
@@ -211,32 +245,67 @@ function Dashboard() {
           </table>
         </div>
 
-        {/* AI Assistant Chat */}
-        <div className="card ai-assistant-chat">
-          <h3 className="ai-assistant-title">🤖 AI Assistant</h3>
-          <div className="ai-chat-box">
-            {/* Display AI Response */}
-            {chatResponse && (
-              <div style={{ backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '6px', marginBottom: '10px', fontSize: '0.9rem', maxHeight: '300px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
-                <p style={{ fontWeight: 600, color: '#5b67e0', marginBottom: '5px' }}>AI:</p>
-                <div style={{ lineHeight: '1.6' }}>{chatResponse}</div>
-              </div>
-            )}
-            
-            <textarea 
-              placeholder="Ask something..." 
-              className="ai-chat-input"
-              value={chatPrompt}
-              onChange={(e) => setChatPrompt(e.target.value)}
-              disabled={isSending}
-            ></textarea>
-            <button 
-              className="btn btn-primary ai-send-btn"
-              onClick={handleSendChat}
-              disabled={isSending || !chatPrompt.trim()}
-            >
-              {isSending ? 'Sending...' : 'Send'}
-            </button>
+        {/* Two AI Assistants Side by Side */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1 }}>
+          {/* Fast Chat Assistant - For General Questions */}
+          <div className="card ai-assistant-chat" style={{ borderLeft: '4px solid #28a745' }}>
+            <h3 className="ai-assistant-title" style={{ color: '#28a745' }}>💬 Quick Chat - Ask Anything</h3>
+            <div className="ai-chat-box">
+              {/* Display AI Response */}
+              {chatResponse && (
+                <div style={{ backgroundColor: '#e8f5e9', padding: '10px', borderRadius: '6px', marginBottom: '10px', fontSize: '0.9rem', maxHeight: '200px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                  <p style={{ fontWeight: 600, color: '#28a745', marginBottom: '5px' }}>AI:</p>
+                  <div style={{ lineHeight: '1.6' }}>{chatResponse}</div>
+                </div>
+              )}
+              
+              <textarea 
+                placeholder="Ask me anything (questions, doubts, info)..." 
+                className="ai-chat-input"
+                value={chatPrompt}
+                onChange={(e) => setChatPrompt(e.target.value)}
+                disabled={isSendingChat}
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()}
+              ></textarea>
+              <button 
+                className="btn btn-primary ai-send-btn"
+                onClick={handleSendChat}
+                disabled={isSendingChat || !chatPrompt.trim()}
+                style={{ backgroundColor: '#28a745', borderColor: '#28a745' }}
+              >
+                {isSendingChat ? 'Sending...' : 'Send'}
+              </button>
+            </div>
+          </div>
+
+          {/* Task Assistant - For Email, Calendar, Delegation */}
+          <div className="card ai-assistant-chat" style={{ borderLeft: '4px solid #5b67e0' }}>
+            <h3 className="ai-assistant-title" style={{ color: '#5b67e0' }}>⚡ Task Assistant - Get Things Done</h3>
+            <div className="ai-chat-box">
+              {/* Display AI Response */}
+              {taskResponse && (
+                <div style={{ backgroundColor: '#e8eaf6', padding: '10px', borderRadius: '6px', marginBottom: '10px', fontSize: '0.9rem', maxHeight: '200px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                  <p style={{ fontWeight: 600, color: '#5b67e0', marginBottom: '5px' }}>AI:</p>
+                  <div style={{ lineHeight: '1.6' }}>{taskResponse}</div>
+                </div>
+              )}
+              
+              <textarea 
+                placeholder="Send emails, schedule meetings, assign tasks..." 
+                className="ai-chat-input"
+                value={taskPrompt}
+                onChange={(e) => setTaskPrompt(e.target.value)}
+                disabled={isSendingTask}
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendTask()}
+              ></textarea>
+              <button 
+                className="btn btn-primary ai-send-btn"
+                onClick={handleSendTask}
+                disabled={isSendingTask || !taskPrompt.trim()}
+              >
+                {isSendingTask ? 'Processing...' : 'Send'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
